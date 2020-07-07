@@ -175,6 +175,17 @@ static int method_to_num(const char* method, int len) {
 	}
 }
 
+// determine whether logging the string is ok or could cause problems
+// (this should eventually be moved to a logging.c file when we get more
+// sophisticated logging, see TODOs in settings.h)
+static int is_string_safe(const char* str, int len) {
+	for (int i = 0; i < len; i++) {
+		if (str[i] < ' ' || str[i] > '~') return 0;
+	}
+
+	return 1;
+}
+
 int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 	h2ow_handler_and_data* tmp = (h2ow_handler_and_data*)self;
 	h2ow_run_context* rctx = tmp->more_data;
@@ -183,6 +194,8 @@ int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 	int method = method_to_num(req->method.base, req->method.len);
 
 	if (unlikely(method == -1)) {
+		H2OW_NOTE("Responding with 405 to an invalid/unsupported http method\n");
+
 		req->res.status = 405;
 		req->res.reason = "Method Not Allowed";
 		h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE,
@@ -199,7 +212,11 @@ int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 	h2ow_request_handler* handler = h2ow__find_matching_handler(&rctx->wctx->handlers,
 			null_terminated_path, method);
 
-	if (handler == NULL) {
+	if (unlikely(handler == NULL)) {
+		H2OW_NOTE("Sending 404 for a request to %s\n",
+				is_string_safe(null_terminated_path, req->path.len)?
+				null_terminated_path : "<contains unsafe characters>");
+
 		req->res.status = 404;
 		req->res.reason = "Not Found";
 		h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE,
@@ -213,46 +230,4 @@ int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 
 	return 0;
 }
-
-//int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
-//	h2ow_handler_and_data* tmp = (h2ow_handler_and_data*)self;
-//	h2ow_run_context* rctx = tmp->more_data;
-//	h2ow_settings* settings = &rctx->wctx->settings;
-//
-//	int method = -1; //method_to_num(req->method.base, req->method.len);
-//
-//	if (method == -1 || 1) {
-//		req->res.status = 405;
-//		req->res.reason = "Method Not Allowed";
-//		h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE,
-//				NULL, H2O_STRLIT("text/plain"));
-//		h2o_send_inline(req, H2O_STRLIT("method not allowed :("));
-//
-//		return 0;
-//	}
-//
-//	char null_terminated_path[req->path.len + 1];
-//	memcpy(null_terminated_path, req->path.base, req->path.len);
-//	null_terminated_path[req->path.len] = '\0';
-//
-//	H2OW_NOTE("Handling request for path %s with method %.*s\n", null_terminated_path,
-//			(int)req->method.len, req->method.base);
-//
-//	h2ow_request_handler* handler = h2ow__find_matching_handler(&rctx->wctx->handlers,
-//			null_terminated_path, method);
-//
-//	if (handler == NULL) {
-//		req->res.status = 404;
-//		req->res.reason = "Not Found";
-//		h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE,
-//				NULL, H2O_STRLIT("text/plain"));
-//		h2o_send_inline(req, H2O_STRLIT("404 not found :(\n"));
-//
-//		return 0;
-//	}
-//
-//	handler->handler(req, rctx);
-//
-//	return 0;
-//}
 
