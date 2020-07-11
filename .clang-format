@@ -30,6 +30,7 @@ BreakBeforeTernaryOperators: false
 BreakStringLiterals: false
 ColumnLimit: 90
 ContinuationIndentWidth: 8
+Cpp11BracedListStyle: false
 DisableFormat: false
 IncludeCategories:
   - Regex: '.*'
