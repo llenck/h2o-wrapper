@@ -54,14 +54,20 @@ typedef struct h2ow_handler_and_data_s h2ow_handler_and_data;
 #define H2OW_WILDCARD_PATH 1
 #define H2OW_REGEX_PATH 2
 
+enum handler_type {
+	H2OW_HANDLER_NORMAL,
+	H2OW_HANDLER_CO
+};
+
 // regex_t's are stored in a seperate array instead of inside the request_handler
 // because on my machine, they are 64 bytes long, while the pointer only uses 8 bytes.
 // that way the handler_lists which aren't of type REGEX_PATH are way smaller,
 // which should give less ram usage and better cache performance
 struct h2ow_request_handler_s {
 	void (*handler)(h2o_req_t*, h2ow_run_context*);
-	int methods;
 	const char* path;
+	int methods;
+	int call_type;
 };
 
 struct h2ow_handler_lists_s {
