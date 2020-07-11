@@ -2,6 +2,7 @@
 
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: Left
 AlignOperands: true
 AlignTrailingComments: false
 AllowAllParametersOfDeclarationOnNextLine: false
