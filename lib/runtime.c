@@ -146,27 +146,36 @@ static int method_to_num(const char* method, int len) {
 	// 2 candidates for a given length, so this should be quite fast
 	switch (len) {
 	case 3:
-		if (!memcmp(method, "GET", len)) return H2OW_METHOD_GET;
-		if (!memcmp(method, "PUT", len)) return H2OW_METHOD_PUT;
+		if (!memcmp(method, "GET", len))
+			return H2OW_METHOD_GET;
+		if (!memcmp(method, "PUT", len))
+			return H2OW_METHOD_PUT;
 		return -1;
 		break;
 	case 4:
-		if (!memcmp(method, "POST", len)) return H2OW_METHOD_POST;
-		if (!memcmp(method, "HEAD", len)) return H2OW_METHOD_HEAD;
+		if (!memcmp(method, "POST", len))
+			return H2OW_METHOD_POST;
+		if (!memcmp(method, "HEAD", len))
+			return H2OW_METHOD_HEAD;
 		return -1;
 		break;
 	case 5:
-		if (!memcmp(method, "PATCH", len)) return H2OW_METHOD_PATCH;
-		if (!memcmp(method, "TRACE", len)) return H2OW_METHOD_TRACE;
+		if (!memcmp(method, "PATCH", len))
+			return H2OW_METHOD_PATCH;
+		if (!memcmp(method, "TRACE", len))
+			return H2OW_METHOD_TRACE;
 		return -1;
 		break;
 	case 6:
-		if (!memcmp(method, "DELETE", len)) return H2OW_METHOD_DELETE;
+		if (!memcmp(method, "DELETE", len))
+			return H2OW_METHOD_DELETE;
 		return -1;
 		break;
 	case 7:
-		if (!memcmp(method, "OPTIONS", len)) return H2OW_METHOD_OPTIONS;
-		if (!memcmp(method, "CONNECT", len)) return H2OW_METHOD_CONNECT;
+		if (!memcmp(method, "OPTIONS", len))
+			return H2OW_METHOD_OPTIONS;
+		if (!memcmp(method, "CONNECT", len))
+			return H2OW_METHOD_CONNECT;
 		return -1;
 		break;
 	default:
@@ -180,7 +189,8 @@ static int method_to_num(const char* method, int len) {
 // sophisticated logging, see TODOs in settings.h)
 static int is_string_safe(const char* str, int len) {
 	for (int i = 0; i < len; i++) {
-		if (str[i] < ' ' || str[i] > '~') return 0;
+		if (str[i] < ' ' || str[i] > '~')
+			return 0;
 	}
 
 	return 1;
@@ -198,8 +208,8 @@ int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 
 		req->res.status = 405;
 		req->res.reason = "Method Not Allowed";
-		h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE,
-				NULL, H2O_STRLIT("text/plain"));
+		h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL,
+		               H2O_STRLIT("text/plain"));
 		h2o_send_inline(req, H2O_STRLIT("method not allowed :("));
 
 		return 0;
@@ -209,18 +219,19 @@ int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 	memcpy(null_terminated_path, req->path.base, req->path.len);
 	null_terminated_path[req->path.len] = '\0';
 
-	h2ow_request_handler* handler = h2ow__find_matching_handler(&rctx->wctx->handlers,
-			null_terminated_path, method);
+	h2ow_request_handler* handler = h2ow__find_matching_handler(
+	        &rctx->wctx->handlers, null_terminated_path, method);
 
 	if (unlikely(handler == NULL)) {
 		H2OW_NOTE("Sending 404 for a request to %s\n",
-				is_string_safe(null_terminated_path, req->path.len)?
-				null_terminated_path : "<contains unsafe characters>");
+		          is_string_safe(null_terminated_path, req->path.len) ?
+		                  null_terminated_path :
+		                  "<contains unsafe characters>");
 
 		req->res.status = 404;
 		req->res.reason = "Not Found";
-		h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE,
-				NULL, H2O_STRLIT("text/plain"));
+		h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL,
+		               H2O_STRLIT("text/plain"));
 		h2o_send_inline(req, H2O_STRLIT("not found xd"));
 
 		return 0;
@@ -230,4 +241,3 @@ int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 
 	return 0;
 }
-

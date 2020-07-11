@@ -10,19 +10,19 @@
 
 // define likely() and unlikely() depending on the compiler
 #if defined(__GNUC__) || defined(__clang__)
-	#ifndef likely
-		#define likely(x) __builtin_expect(!!(x), 1)
-	#endif
-	#ifndef unlikely
-		#define unlikely(x) __builtin_expect((x), 0)
-	#endif
+#	ifndef likely
+#		define likely(x) __builtin_expect(!!(x), 1)
+#	endif
+#	ifndef unlikely
+#		define unlikely(x) __builtin_expect((x), 0)
+#	endif
 #else
-	#ifndef likely
-		#define likely(x) (x)
-	#endif
-	#ifndef unlikely
-		#define unlikely(x) (x)
-	#endif
+#	ifndef likely
+#		define likely(x) (x)
+#	endif
+#	ifndef unlikely
+#		define unlikely(x) (x)
+#	endif
 #endif
 
 // some typedefs
@@ -129,4 +129,3 @@ struct h2ow_context_s {
 };
 
 #endif
-

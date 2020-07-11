@@ -22,7 +22,6 @@ typedef struct thread_data_s {
 	int idx;
 } thread_data;
 
-
 /* these next two functions can be used to close and optionally free handles
  * from a libuv loop, and then possibly stop the loop.
  *

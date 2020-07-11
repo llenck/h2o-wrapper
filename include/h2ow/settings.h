@@ -21,20 +21,19 @@ enum h2ow_debug_levels {
 	H2OW_DEBUG_NOTE
 };
 
-#define H2OW_ERR(...) \
+#define H2OW_ERR(...)                            \
 	if (settings->debug_level >= H2OW_DEBUG_ERR) \
-		fprintf(stderr, "[ERR]: "__VA_ARGS__);
+		fprintf(stderr, "[ERR]: " __VA_ARGS__);
 
-#define H2OW_WARN(...) \
+#define H2OW_WARN(...)                            \
 	if (settings->debug_level >= H2OW_DEBUG_WARN) \
-		fprintf(stderr, "[WARN]: "__VA_ARGS__);
+		fprintf(stderr, "[WARN]: " __VA_ARGS__);
 
-#define H2OW_NOTE(...) \
+#define H2OW_NOTE(...)                            \
 	if (settings->debug_level >= H2OW_DEBUG_NOTE) \
-		fprintf(stderr, "[NOTE]: "__VA_ARGS__);
+		fprintf(stderr, "[NOTE]: " __VA_ARGS__);
 
 void h2ow_set_defaults(h2ow_context* wctx);
 void h2ow_setopt(h2ow_context* wctx, int setting, ...);
 
 #endif
-

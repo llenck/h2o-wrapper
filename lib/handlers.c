@@ -29,9 +29,8 @@ void h2ow__free_handler_lists(h2ow_handler_lists* hl) {
 	}
 }
 
-int h2ow_register_handler(h2ow_context* wctx, int methods, const char *path, int type,
-	void (*handler)(h2o_req_t*, h2ow_run_context*))
-{
+int h2ow_register_handler(h2ow_context* wctx, int methods, const char* path, int type,
+                          void (*handler)(h2o_req_t*, h2ow_run_context*)) {
 	// first, make pointers to the things we actually want to change
 	h2ow_handler_lists* hl = &wctx->handlers;
 
@@ -43,8 +42,8 @@ int h2ow_register_handler(h2ow_context* wctx, int methods, const char *path, int
 	// free_handler_lists, which is called on error, will attempt to free
 	// an invalid regex)
 	if (type == H2OW_REGEX_PATH) {
-		regex_t* new_regexes = realloc(hl->regexes,
-				(*num_handlers + 1) * sizeof(*hl->regexes));
+		regex_t* new_regexes
+		        = realloc(hl->regexes, (*num_handlers + 1) * sizeof(*hl->regexes));
 
 		if (new_regexes == NULL) {
 			h2ow__free_handler_lists(hl);
@@ -63,8 +62,8 @@ int h2ow_register_handler(h2ow_context* wctx, int methods, const char *path, int
 
 	// increase the number of handlers by one, then try to realloc
 	*num_handlers += 1;
-	h2ow_request_handler* new_handlers = realloc(*handlers,
-		*num_handlers * sizeof(**handlers));
+	h2ow_request_handler* new_handlers
+	        = realloc(*handlers, *num_handlers * sizeof(**handlers));
 
 	if (new_handlers == NULL) {
 		h2ow__free_handler_lists(hl);
@@ -86,16 +85,16 @@ int h2ow_register_handler(h2ow_context* wctx, int methods, const char *path, int
 // it needs access to the whole handler_lists structure for
 // REGEX_PATH matching
 static inline int match_handler(const h2ow_handler_lists* hl, int type, int i,
-		const char* path, int method)
-{
+                                const char* path, int method) {
 	const h2ow_request_handler* handler = &hl->handlers_lists[type][i];
-	if (!(handler->methods & method)) return 0;
+	if (!(handler->methods & method))
+		return 0;
 
 	switch (type) {
 	case H2OW_FIXED_PATH:
 		return streq(handler->path, path);
 		break;
-	
+
 	case H2OW_WILDCARD_PATH:
 		// FNM_PATHNAME makes "/test*" not match "/test/asd"
 		return fnmatch(handler->path, path, FNM_PATHNAME) == 0;
@@ -109,11 +108,10 @@ static inline int match_handler(const h2ow_handler_lists* hl, int type, int i,
 }
 
 h2ow_request_handler* h2ow__find_matching_handler(h2ow_handler_lists* hl,
-		const char* path, int method)
-{
+                                                  const char* path, int method) {
 	// make an array to order the different types of handlers
-	int type_order[H2OW_NUM_PATH_TYPES] =
-			{ H2OW_FIXED_PATH, H2OW_WILDCARD_PATH, H2OW_REGEX_PATH };
+	int type_order[H2OW_NUM_PATH_TYPES]
+	        = { H2OW_FIXED_PATH, H2OW_WILDCARD_PATH, H2OW_REGEX_PATH };
 
 	for (int i = 0; i < H2OW_NUM_PATH_TYPES; i++) {
 		// first figure out which list we need
@@ -122,8 +120,7 @@ h2ow_request_handler* h2ow__find_matching_handler(h2ow_handler_lists* hl,
 
 		// then loop through handlers, returning if a match is found
 		for (int j = 0; j < num_handlers; j++) {
-			h2ow_request_handler* current_handler =
-					&hl->handlers_lists[current_type][j];
+			h2ow_request_handler* current_handler = &hl->handlers_lists[current_type][j];
 
 			// see comment above match_handler on why this needs the whole
 			// handler_lists structure instead of just the current request_handler
@@ -136,4 +133,3 @@ h2ow_request_handler* h2ow__find_matching_handler(h2ow_handler_lists* hl,
 	// no matching handler
 	return NULL;
 }
-

@@ -41,9 +41,7 @@ static int create_reuseaddr_socket(h2ow_run_context* rctx) {
 	}
 
 	int reuse_addr = 1;
-	if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &reuse_addr,
-			sizeof(reuse_addr)) == -1)
-	{
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &reuse_addr, sizeof(reuse_addr)) == -1) {
 		H2OW_ERR("Couldn't set SO_REUSEPORT flag on socket\n");
 		close(fd);
 		return -1;
@@ -111,8 +109,8 @@ err:
 
 static void register_handler(h2ow_run_context* rctx) {
 	h2o_pathconf_t* pc = h2o_config_register_path(rctx->hostconf, "/", 0);
-	rctx->root_handler =
-			(h2ow_handler_and_data*)h2o_create_handler(pc, sizeof(*rctx->root_handler));
+	rctx->root_handler
+	        = (h2ow_handler_and_data*)h2o_create_handler(pc, sizeof(*rctx->root_handler));
 	rctx->root_handler->super.on_req = h2ow__request_handler;
 	rctx->root_handler->more_data = rctx;
 }
@@ -182,9 +180,9 @@ int h2ow_run(h2ow_context* wctx) {
 		rctx->globconf.http1.upgrade_to_http2 = 1;
 
 		// init other h2o stuff
-		rctx->hostconf = h2o_config_register_host(&rctx->globconf,
-				h2o_iovec_init(H2O_STRLIT(wctx->settings.ip)),
-				wctx->settings.port);
+		rctx->hostconf = h2o_config_register_host(
+		        &rctx->globconf, h2o_iovec_init(H2O_STRLIT(wctx->settings.ip)),
+		        wctx->settings.port);
 
 		h2o_context_init(&rctx->ctx, &rctx->loop, &rctx->globconf);
 
@@ -202,7 +200,7 @@ int h2ow_run(h2ow_context* wctx) {
 		}
 
 		if (create_signal_handler(rctx, SIGINT) < 0) {
-			H2OW_ERR("Failed to register SIGINT handler for thread %d\n", i);	
+			H2OW_ERR("Failed to register SIGINT handler for thread %d\n", i);
 
 			rctx->running_cleanup_cbs = 1;
 			uv_close((uv_handle_t*)&rctx->listener, h2ow__cleanup_cb);
@@ -213,7 +211,7 @@ int h2ow_run(h2ow_context* wctx) {
 		}
 
 		if (create_signal_handler(rctx, SIGTERM) < 0) {
-			H2OW_ERR("Failed to register SIGTERM handler for thread %d\n", i);	
+			H2OW_ERR("Failed to register SIGTERM handler for thread %d\n", i);
 
 			rctx->running_cleanup_cbs = 2;
 			uv_close((uv_handle_t*)&rctx->listener, h2ow__cleanup_cb);
@@ -233,8 +231,8 @@ int h2ow_run(h2ow_context* wctx) {
 
 	// start the other threads (skip the first, since this thread becomes #1)
 	for (int i = 1; i < num_threads; i++) {
-		int tmp = pthread_create(&wctx->threads[i], NULL,
-				h2ow__per_thread_loop, &thread_infos[i]);
+		int tmp = pthread_create(&wctx->threads[i], NULL, h2ow__per_thread_loop,
+		                         &thread_infos[i]);
 
 		// continue anyway if pthread_create fails, but remember
 		// whether we should pthread_join
