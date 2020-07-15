@@ -85,6 +85,12 @@ struct h2ow_settings_s {
 	const char* log_format;
 	int thread_count;
 	int debug_level;
+
+	const char* ssl_cert_path;
+	const char* ssl_key_path;
+	const char* ssl_ciphers;
+	SSL_CTX* ssl_ctx;
+	int ssl_port;
 };
 
 /* ================ PRIVATE STUFF ================ */
@@ -132,6 +138,9 @@ struct h2ow_context_s {
 
 	// false during cleanup, true if currently accepting and working on connections
 	int is_running;
+
+	// ssl context, which is shared between threads
+	SSL_CTX* ssl_ctx;
 };
 
 #endif

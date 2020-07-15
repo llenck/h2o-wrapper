@@ -18,7 +18,14 @@ void h2ow_set_defaults(h2ow_context* wctx) {
 	settings->log_format = "";
 	settings->debug_level = H2OW_DEBUG_WARN;
 
+	settings->ssl_cert_path = NULL;
+	settings->ssl_key_file = NULL;
+	settings->ssl_ciphers = NULL;
+	settings->ssl_ctx = NULL;
+	settings->ssl_port = 8443;
+
 	wctx->is_running = 0;
+	wctx->ssl_ctx = NULL;
 }
 
 void h2ow_setopt(h2ow_context* wctx, int setting, ...) {
@@ -56,6 +63,32 @@ void h2ow_setopt(h2ow_context* wctx, int setting, ...) {
 	case H2OW_DEBUG_LEVEL: {
 		int lvl = va_arg(args, int);
 		settings->debug_level = lvl;
+		break;
+	}
+
+	case H2OW_SSL_CERT_AND_KEY: {
+		const char* cert_path = va_arg(args, const char*);
+		const char* key_path = va_arg(args, const char*);
+		settings->ssl_cert_path = cert_path;
+		settings->ssl_key_path = key_path;
+		break;
+	}
+
+	case H2OW_SSL_PORT: {
+		int port = va_arg(args, int);
+		settings->ssl_port = port;
+		break;
+	}
+
+	case H2OW_SSL_CIPHERS: {
+		const char* ciphers = va_arg(args, const char*);
+		settings->ssl_ciphers = ciphers;
+		break;
+	}
+
+	case H2OW_SSL_CTX: {
+		SSL_CTX* ctx = va_arg(args, SSL_CTX*);
+		settings->ssl_ctx = ctx;
 		break;
 	}
 

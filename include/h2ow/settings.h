@@ -6,12 +6,18 @@
 enum h2ow_settings {
 	H2OW_DEFAULT_HOST,
 	H2OW_THREAD_COUNT,
+	// not implemented
 	H2OW_SHUTDOWN_TIMEOUT,
 	// partly implemented
 	H2OW_DEBUG_LEVEL,
-	// from here on: not implemented
+	// not implemented
 	H2OW_LOG_FORMAT,
-	H2OW_ADD_HOST
+	H2OW_ADD_HOST,
+	// almost implemented
+	H2OW_SSL_CERT_AND_KEY,
+	H2OW_SSL_PORT,
+	H2OW_SSL_CIPHERS,
+	H2OW_SSL_CTX
 };
 
 enum h2ow_debug_levels {
