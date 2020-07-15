@@ -19,7 +19,7 @@ void h2ow_set_defaults(h2ow_context* wctx) {
 	settings->debug_level = H2OW_DEBUG_WARN;
 
 	settings->ssl_cert_path = NULL;
-	settings->ssl_key_file = NULL;
+	settings->ssl_key_path = NULL;
 	settings->ssl_ciphers = NULL;
 	settings->ssl_ctx = NULL;
 	settings->ssl_port = 8443;
