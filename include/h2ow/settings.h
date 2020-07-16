@@ -16,7 +16,6 @@ enum h2ow_settings {
 	// almost implemented
 	H2OW_SSL_CERT_AND_KEY,
 	H2OW_SSL_PORT,
-	H2OW_SSL_CIPHERS,
 	H2OW_SSL_CTX
 };
 

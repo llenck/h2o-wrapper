@@ -20,7 +20,6 @@ void h2ow_set_defaults(h2ow_context* wctx) {
 
 	settings->ssl_cert_path = NULL;
 	settings->ssl_key_path = NULL;
-	settings->ssl_ciphers = NULL;
 	settings->ssl_ctx = NULL;
 	settings->ssl_port = 8443;
 
@@ -77,12 +76,6 @@ void h2ow_setopt(h2ow_context* wctx, int setting, ...) {
 	case H2OW_SSL_PORT: {
 		int port = va_arg(args, int);
 		settings->ssl_port = port;
-		break;
-	}
-
-	case H2OW_SSL_CIPHERS: {
-		const char* ciphers = va_arg(args, const char*);
-		settings->ssl_ciphers = ciphers;
 		break;
 	}
 

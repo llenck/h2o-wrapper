@@ -88,7 +88,6 @@ struct h2ow_settings_s {
 
 	const char* ssl_cert_path;
 	const char* ssl_key_path;
-	const char* ssl_ciphers;
 	SSL_CTX* ssl_ctx;
 	int ssl_port;
 };
