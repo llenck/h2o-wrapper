@@ -109,9 +109,9 @@ struct h2ow_run_context_s {
 	h2o_globalconf_t globconf;
 	h2o_hostconf_t* hostconf;
 	h2o_context_t ctx;
-	h2o_accept_ctx_t accept_ctx;
+	h2o_accept_ctx_t accept_ctxs[2];
 
-	uv_tcp_t listener;
+	uv_tcp_t listeners[2];
 	uv_loop_t loop;
 	uv_signal_t int_handler, term_handler;
 
