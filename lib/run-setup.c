@@ -132,18 +132,14 @@ int h2ow_run(h2ow_context* wctx) {
 	// allocate some memory for some arrays
 	wctx->run_contexts = calloc(num_threads, sizeof(*wctx->run_contexts));
 	if (wctx->run_contexts == NULL) {
-		if (settings->debug_level >= H2OW_DEBUG_ERR) {
-			fprintf(stderr, "[ERR]: not enough memory to allocate run contexts\n");
-		}
+		H2OW_ERR("not enough memory to allocate run contexts\n");
 
 		return -1;
 	}
 
 	wctx->threads = malloc(num_threads * sizeof(*wctx->threads));
 	if (wctx->threads == NULL) {
-		if (settings->debug_level >= H2OW_DEBUG_ERR) {
-			fprintf(stderr, "[ERR]: not enough memory to allocate pthread handles\n");
-		}
+		H2OW_ERR("not enough memory to allocate pthread handles\n");
 
 		free(wctx->run_contexts);
 		return -1;
@@ -167,9 +163,7 @@ int h2ow_run(h2ow_context* wctx) {
 
 		// h2o initialization depends on a uv loop, so init that second
 		if (uv_loop_init(&rctx->loop) < 0) {
-			if (settings->debug_level >= H2OW_DEBUG_ERR) {
-				fprintf(stderr, "[ERR]: Failed to init uv loop for thread %d\n", i);
-			}
+			H2OW_ERR("Failed to init uv loop for thread %d\n", i);
 
 			ret = -3;
 			goto cleanup;

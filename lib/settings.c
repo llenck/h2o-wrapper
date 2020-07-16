@@ -60,9 +60,8 @@ void h2ow_setopt(h2ow_context* wctx, int setting, ...) {
 	}
 
 	default: {
-		if (settings->debug_level >= H2OW_DEBUG_WARN) {
-			fprintf(stderr, "[warn]: ignoring unknown setting with number %d\n", setting);
-		}
-	} break;
+		H2OW_WARN("ignoring unknown setting with number %d\n", setting);
+		break;
+	}
 	}
 }
