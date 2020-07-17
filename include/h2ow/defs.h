@@ -54,14 +54,20 @@ typedef struct h2ow_handler_and_data_s h2ow_handler_and_data;
 #define H2OW_WILDCARD_PATH 1
 #define H2OW_REGEX_PATH 2
 
+enum handler_type {
+	H2OW_HANDLER_NORMAL,
+	H2OW_HANDLER_CO
+};
+
 // regex_t's are stored in a seperate array instead of inside the request_handler
 // because on my machine, they are 64 bytes long, while the pointer only uses 8 bytes.
 // that way the handler_lists which aren't of type REGEX_PATH are way smaller,
 // which should give less ram usage and better cache performance
 struct h2ow_request_handler_s {
 	void (*handler)(h2o_req_t*, h2ow_run_context*);
-	int methods;
 	const char* path;
+	int methods;
+	int call_type;
 };
 
 struct h2ow_handler_lists_s {
@@ -79,6 +85,11 @@ struct h2ow_settings_s {
 	const char* log_format;
 	int thread_count;
 	int debug_level;
+
+	const char* ssl_cert_path;
+	const char* ssl_key_path;
+	SSL_CTX* ssl_ctx;
+	int ssl_port;
 };
 
 /* ================ PRIVATE STUFF ================ */
@@ -98,9 +109,9 @@ struct h2ow_run_context_s {
 	h2o_globalconf_t globconf;
 	h2o_hostconf_t* hostconf;
 	h2o_context_t ctx;
-	h2o_accept_ctx_t accept_ctx;
+	h2o_accept_ctx_t accept_ctxs[2];
 
-	uv_tcp_t listener;
+	uv_tcp_t listeners[2];
 	uv_loop_t loop;
 	uv_signal_t int_handler, term_handler;
 
@@ -126,6 +137,9 @@ struct h2ow_context_s {
 
 	// false during cleanup, true if currently accepting and working on connections
 	int is_running;
+
+	// ssl context, which is shared between threads
+	SSL_CTX* ssl_ctx;
 };
 
 #endif

@@ -51,7 +51,8 @@ void h2ow__on_signal(uv_signal_t* self, int signum) {
 	switch (signum) {
 	case SIGINT:
 	case SIGTERM:
-		H2OW_NOTE("Received termination signal, deleting listener and signal handlers\n");
+		H2OW_NOTE(
+		        "Received termination signal, deleting listeners and signal handlers\n");
 		H2OW_NOTE("(Delivery of another signal will now instantly kill the process)\n");
 
 		// only close signal handlers if we registered them; we might add a feature
@@ -62,7 +63,9 @@ void h2ow__on_signal(uv_signal_t* self, int signum) {
 		if (rctx->term_handler.data != NULL)
 			uv_close((uv_handle_t*)&rctx->term_handler, NULL);
 
-		uv_close((uv_handle_t*)&rctx->listener, NULL);
+		uv_close((uv_handle_t*)&rctx->listeners[0], NULL);
+		if (rctx->wctx->ssl_ctx != NULL)
+			uv_close((uv_handle_t*)&rctx->listeners[1], NULL);
 
 		h2o_context_request_shutdown(&rctx->ctx);
 
@@ -126,8 +129,10 @@ void h2ow__on_accept(uv_stream_t* listener, int status) {
 
 	// create an h2o_socket which is a wrapper for h2o's internals for sockets
 	sock = h2o_uv_socket_create((uv_stream_t*)conn, h2ow__on_close);
-	// and add the socket to the h2o context via the accept context
-	h2o_accept(&rctx->accept_ctx, sock);
+	// and add the socket to the h2o context via the accept context (figure out which
+	// context by getting the idx of the current listener in rctx->listeners)
+	int ctx_idx = (uv_tcp_t*)listener - rctx->listeners;
+	h2o_accept(&rctx->accept_ctxs[ctx_idx], sock);
 
 	// if we get here, we established a new connection; increment the connection counter
 	rctx->num_connections++;

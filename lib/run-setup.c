@@ -1,6 +1,11 @@
 #include "h2ow/runtime.h"
 #include "h2ow/settings.h"
 
+#include <signal.h>
+
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+
 static int create_signal_handler(h2ow_run_context* rctx, int signum) {
 	uv_signal_t* signal_handler;
 	switch (signum) {
@@ -50,18 +55,19 @@ static int create_reuseaddr_socket(h2ow_run_context* rctx) {
 	return fd;
 }
 
-static int create_listener(h2ow_run_context* rctx) {
+static int create_listener(h2ow_run_context* rctx, int ssl) {
 	const h2ow_settings* settings = &rctx->wctx->settings;
 	struct sockaddr_in addr;
+	uv_tcp_t* listener = &rctx->listeners[ssl ? 1 : 0];
 
 	// create a libuv handle to later assign a socket to
-	if (uv_tcp_init(&rctx->loop, &rctx->listener) < 0) {
+	if (uv_tcp_init(&rctx->loop, listener) < 0) {
 		H2OW_ERR("Couldn't create a new libuv handle for the socket\n");
 		return -1;
 	}
 
 	// create an address that we can later bind the socket to
-	if (uv_ip4_addr(settings->ip, settings->port, &addr) < 0) {
+	if (uv_ip4_addr(settings->ip, ssl ? settings->ssl_port : settings->port, &addr) < 0) {
 		H2OW_ERR("Couldn't get address to bind to\n");
 		return -1;
 	}
@@ -75,7 +81,7 @@ static int create_listener(h2ow_run_context* rctx) {
 	}
 
 	// open the socket as a libuv handle
-	if (uv_tcp_open(&rctx->listener, sockfd) < 0) {
+	if (uv_tcp_open(listener, sockfd) < 0) {
 		H2OW_ERR("Couldn't assign the socket to the libuv handle\n");
 		close(sockfd);
 		return -1;
@@ -85,15 +91,15 @@ static int create_listener(h2ow_run_context* rctx) {
 	// up the handle (since uv_close is of course asynchronous).
 
 	// pass rctx to the listener
-	rctx->listener.data = rctx;
+	listener->data = rctx;
 
 	// bind/listen on the listener
-	if (uv_tcp_bind(&rctx->listener, (struct sockaddr*)&addr, 0) != 0) {
+	if (uv_tcp_bind(listener, (struct sockaddr*)&addr, 0) != 0) {
 		H2OW_ERR("Couldn't bind socket\n");
 		goto err;
 	}
 
-	if (uv_listen((uv_stream_t*)&rctx->listener, 128, h2ow__on_accept) != 0) {
+	if (uv_listen((uv_stream_t*)listener, 128, h2ow__on_accept) != 0) {
 		H2OW_ERR("Couldn't listen on bound socket\n");
 		goto err;
 	}
@@ -102,7 +108,7 @@ static int create_listener(h2ow_run_context* rctx) {
 
 err:
 	rctx->running_cleanup_cbs = 1;
-	uv_close((uv_handle_t*)&rctx->listener, h2ow__cleanup_cb);
+	uv_close((uv_handle_t*)listener, h2ow__cleanup_cb);
 	uv_run(&rctx->loop, UV_RUN_DEFAULT);
 	return -1;
 }
@@ -119,17 +125,63 @@ static void delete_handler(h2ow_run_context* rctx) {
 	free(rctx->root_handler);
 }
 
-int h2ow_run(h2ow_context* wctx) {
-	int ret = 0;
-	int cleanup_until = -1; // inclusive
-	int num_threads = wctx->settings.thread_count;
+static void init_openssl_once() {
+	static int is_initialized = 0;
+	if (__sync_val_compare_and_swap(&is_initialized, 0, 1)) {
+		SSL_load_error_strings();
+		SSL_library_init();
+		OpenSSL_add_all_algorithms();
+	}
+}
+
+static int try_create_ssl_ctx(h2ow_context* wctx) {
 	h2ow_settings* settings = &wctx->settings;
-	thread_data thread_infos[num_threads];
-	int threads_started[num_threads];
 
-	memset(threads_started, 0, num_threads);
+	// either copy the pointer to a user-provided ssl context, or create a new one
+	// if ssl_cert_path and ssl_key_path are given
+	if (settings->ssl_ctx != NULL) {
+		wctx->ssl_ctx = settings->ssl_ctx;
+	}
+	else if (settings->ssl_cert_path != NULL && settings->ssl_key_path != NULL) {
+		init_openssl_once();
 
-	// allocate some memory for some arrays
+		wctx->ssl_ctx = SSL_CTX_new(TLS_server_method());
+
+		// sorry for the looks of this but this is what clang-format wants it to look
+		// like and its still better than doing a million seperate ifs
+		if (wctx->ssl_ctx == NULL
+		    || SSL_CTX_use_certificate_chain_file(wctx->ssl_ctx, settings->ssl_cert_path)
+		               != 1
+		    || SSL_CTX_use_PrivateKey_file(wctx->ssl_ctx, settings->ssl_key_path,
+		                                   SSL_FILETYPE_PEM)
+		               != 1)
+		{
+			unsigned int err = ERR_get_error();
+			H2OW_ERR("couldn't create ssl context because %s failed: %s\n",
+			         ERR_func_error_string(err), ERR_reason_error_string(err));
+
+			return -1;
+		}
+
+#if H2O_USE_NPN
+		h2o_ssl_register_npn_protocols(wctx->ssl_ctx, h2o_http2_npn_protocols);
+#endif
+#if H2O_USE_ALPN
+		h2o_ssl_register_alpn_protocols(wctx->ssl_ctx, h2o_http2_alpn_protocols);
+#endif
+	}
+	else if (settings->ssl_cert_path != NULL || settings->ssl_key_path != NULL) {
+		H2OW_WARN(
+		        "only one of the cert path and the private key path were provided, continuing without ssl\n");
+	}
+
+	return 0;
+}
+
+static int allocate_wctx_buffers(h2ow_context* wctx) {
+	h2ow_settings* settings = &wctx->settings;
+	int num_threads = settings->thread_count;
+
 	wctx->run_contexts = calloc(num_threads, sizeof(*wctx->run_contexts));
 	if (wctx->run_contexts == NULL) {
 		H2OW_ERR("not enough memory to allocate run contexts\n");
@@ -145,82 +197,28 @@ int h2ow_run(h2ow_context* wctx) {
 		return -1;
 	}
 
-	// now init stuff per thread
-	if (num_threads <= 0) {
-		H2OW_ERR("num_threads is %d, exiting\n", num_threads);
-		ret = -2;
-		goto cleanup;
+	return 0;
+}
+
+// adds the number of additional uv_close calls to running_cleanup_cbs
+static void close_uv_listeners(h2ow_run_context* rctx) {
+	uv_close((uv_handle_t*)&rctx->listeners[0], h2ow__cleanup_cb);
+	rctx->running_cleanup_cbs++;
+
+	if (rctx->wctx->ssl_ctx != NULL) {
+		uv_close((uv_handle_t*)&rctx->listeners[1], h2ow__cleanup_cb);
+		rctx->running_cleanup_cbs++;
 	}
-	for (int i = 0; i < num_threads; i++) {
-		h2ow_run_context* rctx = &wctx->run_contexts[i];
+}
 
-		// first init some fields of rctx that we know already
-		thread_infos[i].wctx = wctx;
-		thread_infos[i].idx = i;
+static void run_all_threads(h2ow_context* wctx, thread_data* thread_infos) {
+	h2ow_settings* settings = &wctx->settings;
+	int num_threads = settings->thread_count;
+	int threads_started[num_threads];
+	memset(threads_started, 0, num_threads);
 
-		rctx->wctx = wctx;
-		rctx->num_connections = 0;
-
-		// h2o initialization depends on a uv loop, so init that second
-		if (uv_loop_init(&rctx->loop) < 0) {
-			H2OW_ERR("Failed to init uv loop for thread %d\n", i);
-
-			ret = -3;
-			goto cleanup;
-		}
-
-		// create h2o config
-		h2o_config_init(&rctx->globconf);
-		rctx->globconf.http1.upgrade_to_http2 = 1;
-
-		// init other h2o stuff
-		rctx->hostconf = h2o_config_register_host(
-		        &rctx->globconf, h2o_iovec_init(H2O_STRLIT(wctx->settings.ip)),
-		        wctx->settings.port);
-
-		h2o_context_init(&rctx->ctx, &rctx->loop, &rctx->globconf);
-
-		rctx->accept_ctx.ctx = &rctx->ctx;
-		rctx->accept_ctx.hosts = rctx->globconf.hosts;
-
-		// register more uv stuff, some of which depends on h2o being initialized
-		register_handler(rctx);
-
-		if (create_listener(rctx) < 0) {
-			H2OW_ERR("Failed to create listener for thread %d\n", i);
-
-			ret = -4;
-			goto cleanup;
-		}
-
-		if (create_signal_handler(rctx, SIGINT) < 0) {
-			H2OW_ERR("Failed to register SIGINT handler for thread %d\n", i);
-
-			rctx->running_cleanup_cbs = 1;
-			uv_close((uv_handle_t*)&rctx->listener, h2ow__cleanup_cb);
-			uv_run(&rctx->loop, UV_RUN_DEFAULT);
-			// can't close the loop since h2o registers some handles to the uv loop
-			ret = -5;
-			goto cleanup;
-		}
-
-		if (create_signal_handler(rctx, SIGTERM) < 0) {
-			H2OW_ERR("Failed to register SIGTERM handler for thread %d\n", i);
-
-			rctx->running_cleanup_cbs = 2;
-			uv_close((uv_handle_t*)&rctx->listener, h2ow__cleanup_cb);
-			uv_close((uv_handle_t*)&rctx->int_handler, h2ow__cleanup_cb);
-			uv_run(&rctx->loop, UV_RUN_DEFAULT);
-			// can't close the loop since h2o registers some handles to the uv loop
-			ret = -5;
-			goto cleanup;
-		}
-
-		// in case we error out during initialization, use cleanup_until to tell
-		// later parts or the code how many thread contexts have been fully initialized
-		cleanup_until = i;
-	}
-
+	// signal some handlers to actually do stuff (which they shouldn't if we just
+	// ran the uv loop for cleaning up after a fatal error)
 	wctx->is_running = 1;
 
 	// start the other threads (skip the first, since this thread becomes #1)
@@ -244,8 +242,137 @@ int h2ow_run(h2ow_context* wctx) {
 			pthread_join(wctx->threads[i], NULL);
 		}
 	}
+}
+
+int h2ow_run(h2ow_context* wctx) {
+	int ret = 0;
+	int cleanup_until = -1; // inclusive
+	h2ow_settings* settings = &wctx->settings;
+	int num_threads = settings->thread_count;
+	thread_data thread_infos[num_threads];
+	struct sigaction old_sigpipe_act, new_sigpipe_act;
+
+	new_sigpipe_act.sa_handler = SIG_IGN;
+	new_sigpipe_act.sa_flags = 0;
+	sigemptyset(&new_sigpipe_act.sa_mask);
+	// shouldn't be able to fail, according to the errors listed in sigactions man page
+	sigaction(SIGPIPE, &new_sigpipe_act, &old_sigpipe_act);
+
+	if (allocate_wctx_buffers(wctx) < 0) {
+		// nothing is allocated / initialized yet so we don't need any cleanup
+		return -1;
+	}
+
+	if (try_create_ssl_ctx(wctx) < 0) {
+		ret = -5;
+		goto cleanup;
+	}
+
+	// now init stuff per thread
+	if (num_threads <= 0) {
+		H2OW_ERR("num_threads is %d, exiting\n", num_threads);
+		ret = -2;
+		goto cleanup;
+	}
+
+	for (int i = 0; i < num_threads; i++) {
+		h2ow_run_context* rctx = &wctx->run_contexts[i];
+
+		thread_infos[i].wctx = wctx;
+		thread_infos[i].idx = i;
+
+		// first init some fields of rctx that we know already
+		rctx->wctx = wctx;
+		rctx->num_connections = 0;
+
+		// h2o initialization depends on a uv loop, so init that second
+		if (uv_loop_init(&rctx->loop) < 0) {
+			H2OW_ERR("Failed to init uv loop for thread %d\n", i);
+
+			ret = -3;
+			goto cleanup;
+		}
+
+		// create h2o config
+		h2o_config_init(&rctx->globconf);
+		rctx->globconf.http1.upgrade_to_http2 = 1;
+
+		// init other h2o stuff
+		rctx->hostconf = h2o_config_register_host(
+		        &rctx->globconf, h2o_iovec_init(H2O_STRLIT(wctx->settings.ip)),
+		        wctx->settings.port);
+
+		h2o_context_init(&rctx->ctx, &rctx->loop, &rctx->globconf);
+
+		rctx->accept_ctxs[0].ctx = &rctx->ctx;
+		rctx->accept_ctxs[0].hosts = rctx->globconf.hosts;
+		if (wctx->ssl_ctx != NULL) {
+			rctx->accept_ctxs[1].ctx = &rctx->ctx;
+			rctx->accept_ctxs[1].hosts = rctx->globconf.hosts;
+			rctx->accept_ctxs[1].ssl_ctx = wctx->ssl_ctx;
+		}
+
+		register_handler(rctx);
+
+		if (create_listener(rctx, 0) < 0) {
+			H2OW_ERR("Failed to create plain http listener for thread %d\n", i);
+
+			ret = -4;
+			goto cleanup;
+		}
+		if (wctx->ssl_ctx != NULL) {
+			if (create_listener(rctx, 1) < 0) {
+				H2OW_ERR("Failed to create ssl listener for thread %d\n", i);
+
+				rctx->running_cleanup_cbs = 1;
+				uv_close((uv_handle_t*)&rctx->listeners[0], h2ow__cleanup_cb);
+				uv_run(&rctx->loop, UV_RUN_DEFAULT);
+				// can't close the loop since h2o registers some handles to the uv loop
+
+				ret = -4;
+				goto cleanup;
+			}
+		}
+
+		if (create_signal_handler(rctx, SIGINT) < 0) {
+			H2OW_ERR("Failed to register SIGINT handler for thread %d\n", i);
+
+			// close_uv_listeners adds the number of additional uv_close calls to
+			// running_cleanup_cbs, so set that to 0
+			rctx->running_cleanup_cbs = 0;
+			close_uv_listeners(rctx);
+			uv_run(&rctx->loop, UV_RUN_DEFAULT);
+			// can't close the loop since h2o registers some handles to the uv loop
+
+			ret = -5;
+			goto cleanup;
+		}
+
+		if (create_signal_handler(rctx, SIGTERM) < 0) {
+			H2OW_ERR("Failed to register SIGTERM handler for thread %d\n", i);
+
+			// close_uv_listeners adds the number of additional uv_close calls to
+			// running_cleanup_cbs, so set that to 1 (for the SIGINT handler)
+			rctx->running_cleanup_cbs = 1;
+			close_uv_listeners(rctx);
+			uv_close((uv_handle_t*)&rctx->int_handler, h2ow__cleanup_cb);
+			uv_run(&rctx->loop, UV_RUN_DEFAULT);
+			// can't close the loop since h2o registers some handles to the uv loop
+
+			ret = -5;
+			goto cleanup;
+		}
+
+		// in case we error out during initialization, use cleanup_until to tell
+		// later parts or the code how many thread contexts have been fully initialized
+		cleanup_until = i;
+	}
+
+	run_all_threads(wctx, thread_infos);
 
 cleanup:
+	sigaction(SIGPIPE, &old_sigpipe_act, NULL);
+
 	for (int i = 0; i <= cleanup_until; i++) {
 		// we can't do much here, since we can't call uv_loop_close
 		// because h2o registers some timers and doesn't bother to support
@@ -254,6 +381,10 @@ cleanup:
 		h2ow_run_context* rctx = &wctx->run_contexts[i];
 		delete_handler(rctx);
 	}
+
+	// only clean up ssl context if we created it
+	if (settings->ssl_ctx == NULL && wctx->ssl_ctx != NULL)
+		SSL_CTX_free(wctx->ssl_ctx);
 
 	free(wctx->run_contexts);
 	free(wctx->threads);
