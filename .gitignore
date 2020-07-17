@@ -3,5 +3,6 @@ cmake_install.cmake
 CMakeFiles**
 CMakeCache.txt
 libh2ow.*
-example/simple
+example/*
 !example/Makefile
+!example/*.c
