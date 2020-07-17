@@ -1,6 +1,8 @@
 #include "h2ow/runtime.h"
 #include "h2ow/settings.h"
 
+#include <signal.h>
+
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
@@ -248,6 +250,13 @@ int h2ow_run(h2ow_context* wctx) {
 	h2ow_settings* settings = &wctx->settings;
 	int num_threads = settings->thread_count;
 	thread_data thread_infos[num_threads];
+	struct sigaction old_sigpipe_act, new_sigpipe_act;
+
+	new_sigpipe_act.sa_handler = SIG_IGN;
+	new_sigpipe_act.sa_flags = 0;
+	sigemptyset(&new_sigpipe_act.sa_mask);
+	// shouldn't be able to fail, according to the errors listed in sigactions man page
+	sigaction(SIGPIPE, &new_sigpipe_act, &old_sigpipe_act);
 
 	if (allocate_wctx_buffers(wctx) < 0) {
 		// nothing is allocated / initialized yet so we don't need any cleanup
@@ -362,6 +371,8 @@ int h2ow_run(h2ow_context* wctx) {
 	run_all_threads(wctx, thread_infos);
 
 cleanup:
+	sigaction(SIGPIPE, &old_sigpipe_act, NULL);
+
 	for (int i = 0; i <= cleanup_until; i++) {
 		// we can't do much here, since we can't call uv_loop_close
 		// because h2o registers some timers and doesn't bother to support
