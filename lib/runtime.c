@@ -54,10 +54,12 @@ void h2ow__on_signal(uv_signal_t* self, int signum) {
 		H2OW_NOTE("Received termination signal, deleting listener and signal handlers\n");
 		H2OW_NOTE("(Delivery of another signal will now instantly kill the process)\n");
 
-		if (&rctx->int_handler != NULL)
+		// only close signal handlers if we registered them; we might add a feature
+		// later which gives the user a choice in which signals are handled and how
+		if (rctx->int_handler.data != NULL)
 			uv_close((uv_handle_t*)&rctx->int_handler, NULL);
 
-		if (&rctx->term_handler != NULL)
+		if (rctx->term_handler.data != NULL)
 			uv_close((uv_handle_t*)&rctx->term_handler, NULL);
 
 		uv_close((uv_handle_t*)&rctx->listener, NULL);
