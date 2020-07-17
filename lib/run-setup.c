@@ -144,6 +144,7 @@ static int try_create_ssl_ctx(h2ow_context* wctx) {
 		init_openssl_once();
 
 		wctx->ssl_ctx = SSL_CTX_new(TLS_server_method());
+
 		// sorry for the looks of this but this is what clang-format wants it to look
 		// like and its still better than doing a million seperate ifs
 		if (wctx->ssl_ctx == NULL
@@ -159,6 +160,13 @@ static int try_create_ssl_ctx(h2ow_context* wctx) {
 
 			return -1;
 		}
+
+#if H2O_USE_NPN
+		h2o_ssl_register_npn_protocols(wctx->ssl_ctx, h2o_http2_npn_protocols);
+#endif
+#if H2O_USE_ALPN
+		h2o_ssl_register_alpn_protocols(wctx->ssl_ctx, h2o_http2_alpn_protocols);
+#endif
 	}
 	else if (settings->ssl_cert_path != NULL || settings->ssl_key_path != NULL) {
 		H2OW_WARN(
