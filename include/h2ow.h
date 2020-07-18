@@ -6,5 +6,6 @@
 #include "h2ow/handlers.h"
 #include "h2ow/run-setup.h"
 #include "h2ow/runtime.h"
+#include "h2ow/utils.h"
 
 #endif
