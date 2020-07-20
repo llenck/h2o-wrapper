@@ -9,7 +9,7 @@ void test_handler(h2o_req_t* req, __attribute__((unused)) h2ow_run_context* rctx
 	h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL,
 	               H2O_STRLIT("text/plain"));
 
-	char* buffer = h2o_mem_alloc_shared(&req->pool, 256, NULL);
+	char* buffer = h2ow_req_pool_alloc(req, 256);
 
 	// h2o saves the version as 0xMMmm, where M is the mayor version and m is the minor version
 	int len = snprintf(buffer, 256, "Connected over %s using HTTP/%d.%d\n",
