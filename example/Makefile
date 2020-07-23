@@ -3,7 +3,7 @@ CFLAGS += -Wall -Wextra -Wpedantic -std=gnu99
 INCLUDEDIRS := -I ../include
 LIBS := ../libh2ow.a -luv -lcrypto -lssl -lh2o -lpthread
 
-all: simple ssl
+all: simple ssl post-parsing
 
 simple: simple.c ../libh2ow.a
 	$(CC) $(CFLAGS) $(INCLUDEDIRS) simple.c $(LIBS) -o simple
@@ -11,5 +11,8 @@ simple: simple.c ../libh2ow.a
 ssl: ssl.c ../libh2ow.a
 	$(CC) $(CFLAGS) $(INCLUDEDIRS) ssl.c $(LIBS) -o ssl
 
+post-parsing: post-parsing.c ../libh2ow.a
+	$(CC) $(CFLAGS) $(INCLUDEDIRS) post-parsing.c $(LIBS) -o post-parsing
+
 clean:
-	$(RM) simple ssl
+	$(RM) simple ssl post-parsing
