@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+
+echo -e \
+	"create libh2ow.a\n" \
+	"addlib libh2ow-pre.a\n" \
+	"addlib deps/h2o/libh2o.a\n" \
+	"save\n" \
+	"end\n" \
+	| ar -M || exit
+
+rm -f libh2ow.a.tmp
