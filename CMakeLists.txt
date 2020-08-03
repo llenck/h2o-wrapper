@@ -22,15 +22,28 @@ include_directories(
 	deps/h2o/deps/quicly/include
 	deps/h2o/deps/yaml/include
 	deps/h2o/deps/yoml
+
+	# the headers of unicos dependencies are copied into its include dir
+	deps/unico/include
 )
 
 include(ExternalProject)
+
 ExternalProject_Add(h2o
 	SOURCE_DIR deps/h2o
 	PREFIX deps/h2o
 	BINARY_DIR deps/h2o
 	STEP_TARGETS build
 	BUILD_COMMAND cmake --build . --target libh2o
+	INSTALL_COMMAND cmake -E echo "Skipping install step"
+)
+ExternalProject_Add(unico
+	SOURCE_DIR deps/unico
+	PREFIX deps/unico
+	BINARY_DIR deps/unico
+	STEP_TARGETS build
+	CONFIGURE_COMMAND cmake -E echo "Skipping configure step"
+	BUILD_COMMAND ./compile
 	INSTALL_COMMAND cmake -E echo "Skipping install step"
 )
 
@@ -44,5 +57,5 @@ add_library(h2ow-pre STATIC lib/runtime.c lib/settings.c lib/handlers.c lib/run-
 # combine our library with others so people don't have to link against them
 add_custom_target(h2ow ALL
 	COMMAND ./combine-libs
-	DEPENDS h2ow-pre h2o
+	DEPENDS h2ow-pre h2o unico
 )

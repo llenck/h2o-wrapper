@@ -4,6 +4,7 @@ echo -e \
 	"create libh2ow.a\n" \
 	"addlib libh2ow-pre.a\n" \
 	"addlib deps/h2o/libh2o.a\n" \
+	"addlib deps/unico/unico.a\n" \
 	"save\n" \
 	"end\n" \
 	| ar -M || exit
