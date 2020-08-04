@@ -16,12 +16,6 @@ typedef struct h2o_handler_and_data_s {
 	void* more_data; // could be named data, but lets be consistent with uv_tcp_and_data_s
 } h2o_handler_and_data;
 
-// data that is passed to h2ow__per_thread_loop
-typedef struct thread_data_s {
-	h2ow_context* wctx;
-	int idx;
-} thread_data;
-
 /* these next two functions can be used to close and optionally free handles
  * from a libuv loop, and then possibly stop the loop.
  *
@@ -36,10 +30,6 @@ void h2ow__cleanup_free_cb(uv_handle_t* self);
 void h2ow__on_signal(uv_signal_t* self, int signum);
 void h2ow__on_close(uv_handle_t* conn);
 void h2ow__on_accept(uv_stream_t* listener, int status);
-
-// loop that runs a fully initialized h2ow_run_context, which is passed as arg.
-// the function prototype is like this to match a pthread start routine
-void* h2ow__per_thread_loop(void* arg);
 
 // handler that passes the request on the the user-defined handlers.
 // needed because h2o's handler system only handles prefixes, while we allow for

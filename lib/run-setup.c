@@ -5,6 +5,7 @@
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <unico.h>
 
 static int create_signal_handler(h2ow_run_context* rctx, int signum) {
 	uv_signal_t* signal_handler;
@@ -211,8 +212,80 @@ static void close_uv_listeners(h2ow_run_context* rctx) {
 	}
 }
 
-static void run_all_threads(h2ow_context* wctx, thread_data* thread_infos) {
+static int create_co_objs(h2ow_run_context* rctx) {
+	int pool_len = 16; // start with expecting 16 concurrent coroutines per thread
+	h2ow_co_and_stack* pool = malloc(sizeof(*rctx->co_pool) * pool_len);
+	if (pool == NULL) {
+		return -1;
+	}
+
+	unico_thread_init();
+
+	// init coroutine pool related pointers in rctx
+	rctx->co_pool = pool;
+	rctx->co_pool_len = pool_len;
+	rctx->co_rh = pool;
+	rctx->co_wh = pool;
+	rctx->co_ah = &pool[pool_len - 1];
+
+	int cleanup_until = -1;
+
+	for (int i = 0; i < pool_len; i++) {
+		pool[i].prev = &pool[i - 1];
+		pool[i].next = &pool[i + 1];
+
+		if (unico_create_stack(&pool[i].stack, 4096 * 2) < 0) {
+			goto cleanup;
+		}
+
+		cleanup_until = i;
+	}
+
+	// fix ends of linked list
+	pool[0].prev = NULL;
+	pool[pool_len - 1].next = NULL;
+
+	return 0;
+
+cleanup:
+	for (int i = 0; i <= cleanup_until; i++) {
+		unico_free_stack(&pool[i].stack);
+	}
+	return -1;
+}
+
+static void free_co_objs(h2ow_run_context* rctx) {
+	h2ow_co_and_stack* pool = rctx->co_pool;
+	int pool_len = rctx->co_pool_len;
+
+	for (int i = 0; i < pool_len; i++) {
+		unico_free_stack(&pool[i].stack);
+	}
+
+	unico_thread_free();
+}
+
+static void* per_thread_loop(void* arg) {
+	h2ow_run_context* rctx = arg;
+	h2ow_settings* settings = &rctx->wctx->settings;
+
+	// unico stuff needs to be initialized in the right thread
+	if (create_co_objs(rctx) < 0) {
+		H2OW_WARN(
+		        "Failed to create coroutine objects for thread, running with less threads than usual\n");
+		return NULL;
+	}
+
+	uv_run(&rctx->loop, UV_RUN_DEFAULT);
+
+	free_co_objs(rctx);
+
+	return NULL;
+}
+
+static void run_all_threads(h2ow_context* wctx) {
 	h2ow_settings* settings = &wctx->settings;
+	h2ow_run_context* rctxs = wctx->run_contexts;
 	int num_threads = settings->thread_count;
 	int threads_started[num_threads];
 	memset(threads_started, 0, num_threads);
@@ -223,8 +296,8 @@ static void run_all_threads(h2ow_context* wctx, thread_data* thread_infos) {
 
 	// start the other threads (skip the first, since this thread becomes #1)
 	for (int i = 1; i < num_threads; i++) {
-		int tmp = pthread_create(&wctx->threads[i], NULL, h2ow__per_thread_loop,
-		                         &thread_infos[i]);
+		int tmp = pthread_create(&wctx->threads[i], NULL, per_thread_loop,
+		                         &rctxs[i]);
 
 		// continue anyway if pthread_create fails, but remember
 		// whether we should pthread_join
@@ -235,7 +308,7 @@ static void run_all_threads(h2ow_context* wctx, thread_data* thread_infos) {
 	}
 
 	// this thread becomes thread #1
-	h2ow__per_thread_loop(&thread_infos[0]);
+	per_thread_loop(&rctxs[0]);
 
 	for (int i = 1; i < num_threads; i++) {
 		if (threads_started[i]) {
@@ -249,7 +322,6 @@ int h2ow_run(h2ow_context* wctx) {
 	int cleanup_until = -1; // inclusive
 	h2ow_settings* settings = &wctx->settings;
 	int num_threads = settings->thread_count;
-	thread_data thread_infos[num_threads];
 	struct sigaction old_sigpipe_act, new_sigpipe_act;
 
 	new_sigpipe_act.sa_handler = SIG_IGN;
@@ -277,9 +349,6 @@ int h2ow_run(h2ow_context* wctx) {
 
 	for (int i = 0; i < num_threads; i++) {
 		h2ow_run_context* rctx = &wctx->run_contexts[i];
-
-		thread_infos[i].wctx = wctx;
-		thread_infos[i].idx = i;
 
 		// first init some fields of rctx that we know already
 		rctx->wctx = wctx;
@@ -368,7 +437,7 @@ int h2ow_run(h2ow_context* wctx) {
 		cleanup_until = i;
 	}
 
-	run_all_threads(wctx, thread_infos);
+	run_all_threads(wctx);
 
 cleanup:
 	sigaction(SIGPIPE, &old_sigpipe_act, NULL);

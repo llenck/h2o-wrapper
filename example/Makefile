@@ -7,11 +7,13 @@ CFLAGS += -Wall -Wextra -std=gnu99
 
 # on my machine, this is enough; idk however which ones are needed in other cases
 INCLUDEDIRS := -I ../include \
+ -I ../deps/unico/include \
  -I ../deps/h2o/include \
  -I ../deps/h2o/deps/picotls/include
 
 # if the above one doesn't build, try this full list of things used in h2o
 #INCLUDEDIRS := -I ../include \
+# -I ../deps/unico/include \
 # -I ../deps/h2o/include \
 # -I ../deps/h2o/deps/cloexec \
 # -I ../deps/h2o/deps/brotli/c/include \

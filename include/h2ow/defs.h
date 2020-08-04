@@ -7,6 +7,7 @@
 #include <regex.h>
 #include <h2o.h>
 #include <uv.h>
+#include <unico.h>
 
 // define likely() and unlikely() depending on the compiler
 #if defined(__GNUC__) || defined(__clang__)
@@ -33,6 +34,7 @@ typedef struct h2ow_request_handler_s h2ow_request_handler;
 typedef struct h2ow_handler_lists_s h2ow_handler_lists;
 
 typedef struct h2ow_handler_and_data_s h2ow_handler_and_data;
+typedef struct h2ow_co_and_stack_s h2ow_co_and_stack;
 
 /* ================ HANDLER STUFF ================ */
 // save supported methods as a bit field
@@ -97,6 +99,14 @@ struct h2ow_handler_and_data_s {
 	void* more_data;
 };
 
+// convenience struct for pool of stacks and coroutine objects
+struct h2ow_co_and_stack_s {
+	unico_stack stack;
+	unico_co_state co;
+
+	h2ow_co_and_stack* prev, * next;
+};
+
 /* ================ USER-VISIBLE STUFF ================ */
 // info about stuff running in the current thread
 struct h2ow_run_context_s {
@@ -118,6 +128,17 @@ struct h2ow_run_context_s {
 	// a close callback should use uv_stop();
 	// this is only used in case of error, since we otherwise know how much is left
 	int running_cleanup_cbs;
+
+	// we keep a pool of stacks and coroutine objects for calling coroutines in order to
+	// minimize construction and destruction of those objects, which often involve
+	// malloc and free calls
+	h2ow_co_and_stack* co_pool;
+	int co_pool_len;
+	// all coroutine objects are in a linked list; rh ("read head") is the pointer to
+	// the start of active coroutines, ch ("write head") is the pointer to the first
+	// unused h2ow_co_and_stack, ah ("append head") is the pointer to the end of
+	// the linked list, where h2ow_co_and_stacks are recycled to
+	h2ow_co_and_stack* co_rh, * co_wh, * co_ah;
 };
 
 // for a set of threads

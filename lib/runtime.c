@@ -138,16 +138,6 @@ void h2ow__on_accept(uv_stream_t* listener, int status) {
 	rctx->num_connections++;
 }
 
-void* h2ow__per_thread_loop(void* arg) {
-	thread_data* data = arg;
-	h2ow_context* wctx = data->wctx;
-	h2ow_run_context* rctx = &wctx->run_contexts[data->idx];
-
-	uv_run(&rctx->loop, UV_RUN_DEFAULT);
-
-	return NULL;
-}
-
 static int method_to_num(const char* method, int len) {
 	// this will probably compile to a jump table, and then there are at max
 	// 2 candidates for a given length, so this should be quite fast
