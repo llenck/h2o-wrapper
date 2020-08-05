@@ -104,7 +104,10 @@ struct h2ow_co_and_stack_s {
 	unico_stack stack;
 	unico_co_state co;
 
-	h2ow_co_and_stack* prev, * next;
+	// since we want to be able to realloc() a buffer of these, store the index of
+	// adjacent nodes instead of a pointer to them, and -1 instead of NULL
+	h2ow_co_and_stack** pool;
+	int prev, next;
 };
 
 /* ================ USER-VISIBLE STUFF ================ */
@@ -138,7 +141,7 @@ struct h2ow_run_context_s {
 	// the start of active coroutines, ch ("write head") is the pointer to the first
 	// unused h2ow_co_and_stack, ah ("append head") is the pointer to the end of
 	// the linked list, where h2ow_co_and_stacks are recycled to
-	h2ow_co_and_stack* co_rh, * co_wh, * co_ah;
+	int co_rh, co_wh, co_ah;
 };
 
 // for a set of threads

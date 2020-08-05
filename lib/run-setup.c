@@ -224,15 +224,16 @@ static int create_co_objs(h2ow_run_context* rctx) {
 	// init coroutine pool related pointers in rctx
 	rctx->co_pool = pool;
 	rctx->co_pool_len = pool_len;
-	rctx->co_rh = pool;
-	rctx->co_wh = pool;
-	rctx->co_ah = &pool[pool_len - 1];
+	rctx->co_rh = 0;
+	rctx->co_wh = 0;
+	rctx->co_ah = pool_len - 1;
 
 	int cleanup_until = -1;
 
 	for (int i = 0; i < pool_len; i++) {
-		pool[i].prev = &pool[i - 1];
-		pool[i].next = &pool[i + 1];
+		pool[i].prev_idx = i - 1;
+		pool[i].next_idx = i + 1;
+		pool[i].pool = &rctx->co_pool;
 
 		if (unico_create_stack(&pool[i].stack, 4096 * 2) < 0) {
 			goto cleanup;
@@ -242,8 +243,8 @@ static int create_co_objs(h2ow_run_context* rctx) {
 	}
 
 	// fix ends of linked list
-	pool[0].prev = NULL;
-	pool[pool_len - 1].next = NULL;
+	pool[0].prev_idx = -1;
+	pool[pool_len - 1].next_idx = -1;
 
 	return 0;
 
