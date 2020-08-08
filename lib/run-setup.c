@@ -231,8 +231,8 @@ static int create_co_objs(h2ow_run_context* rctx) {
 	int cleanup_until = -1;
 
 	for (int i = 0; i < pool_len; i++) {
-		pool[i].prev_idx = i - 1;
-		pool[i].next_idx = i + 1;
+		pool[i].prev = i - 1;
+		pool[i].next = i + 1;
 		pool[i].pool = &rctx->co_pool;
 
 		if (unico_create_stack(&pool[i].stack, 4096 * 2) < 0) {
@@ -243,8 +243,8 @@ static int create_co_objs(h2ow_run_context* rctx) {
 	}
 
 	// fix ends of linked list
-	pool[0].prev_idx = -1;
-	pool[pool_len - 1].next_idx = -1;
+	pool[0].prev = -1;
+	pool[pool_len - 1].next = -1;
 
 	return 0;
 

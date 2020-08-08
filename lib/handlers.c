@@ -29,9 +29,8 @@ void h2ow__free_handler_lists(h2ow_handler_lists* hl) {
 	}
 }
 
-int h2ow_register_handler6(h2ow_context* wctx, int methods, const char* path, int type,
-                           void (*handler)(h2o_req_t*, h2ow_run_context*),
-                           int call_type) {
+static int h2ow_register_handler6(h2ow_context* wctx, int methods, const char* path,
+                                  int type, void* handler, int call_type) {
 	// first, make pointers to the things we actually want to change
 	h2ow_handler_lists* hl = &wctx->handlers;
 
@@ -85,9 +84,17 @@ int h2ow_register_handler6(h2ow_context* wctx, int methods, const char* path, in
 
 int h2ow_register_handler(h2ow_context* wctx, int methods, const char* path, int type,
                           void (*handler)(h2o_req_t*, h2ow_run_context*)) {
-	return h2ow_register_handler6(wctx, methods, path, type, handler,
+	return h2ow_register_handler6(wctx, methods, path, type, (void*)handler,
 	                              H2OW_HANDLER_NORMAL);
 }
+
+int h2ow_register_handler_co(h2ow_context* wctx, int methods, const char* path, int type,
+                             void (*handler)(h2o_req_t*, h2ow_run_context*,
+                                             unico_co_state*)) {
+	return h2ow_register_handler6(wctx, methods, path, type, (void*)handler,
+	                              H2OW_HANDLER_CO);
+}
+
 // match_handlers doesn't actually take current_handler since
 // it needs access to the whole handler_lists structure for
 // REGEX_PATH matching

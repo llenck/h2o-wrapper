@@ -63,7 +63,12 @@ enum handler_type { H2OW_HANDLER_NORMAL, H2OW_HANDLER_CO };
 // that way the handler_lists which aren't of type REGEX_PATH are way smaller,
 // which should give less ram usage and better cache performance
 struct h2ow_request_handler_s {
-	void (*handler)(h2o_req_t*, h2ow_run_context*);
+	union {
+		void* handler;
+		void (*sync_handler)(h2o_req_t*, h2ow_run_context*);
+		void (*co_handler)(h2o_req_t*, h2ow_run_context*, unico_co_state*);
+	};
+
 	const char* path;
 	int methods;
 	int call_type;

@@ -13,8 +13,9 @@ void h2ow__free_handler_lists(h2ow_handler_lists* hl);
 int h2ow_register_handler(h2ow_context* wctx, int methods, const char* path, int type,
                           void (*handler)(h2o_req_t*, h2ow_run_context*));
 
-int h2ow_register_handler6(h2ow_context* wctx, int methods, const char* path, int type,
-                           void (*handler)(h2o_req_t*, h2ow_run_context*), int call_type);
+int h2ow_register_handler_co(h2ow_context* wctx, int methods, const char* path, int type,
+                             void (*handler)(h2o_req_t*, h2ow_run_context*,
+                                             unico_co_state*));
 
 // try to find a matching handler, given a path and method
 // return either a pointer to the handler or NULL on failure

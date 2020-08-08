@@ -234,7 +234,7 @@ int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 		return 0;
 	}
 
-	handler->handler(req, rctx);
+	handler->sync_handler(req, rctx);
 
 	return 0;
 }
