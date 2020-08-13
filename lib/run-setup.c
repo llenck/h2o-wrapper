@@ -224,6 +224,7 @@ static int create_co_objs(h2ow_run_context* rctx) {
 	// init coroutine pool related pointers in rctx
 	rctx->co_pool = pool;
 	rctx->co_pool_len = pool_len;
+	rctx->co_pool_usage = 0;
 	rctx->co_rh = 0;
 	rctx->co_wh = 0;
 	rctx->co_ah = pool_len - 1;
@@ -264,6 +265,8 @@ static void free_co_objs(h2ow_run_context* rctx) {
 	}
 
 	unico_thread_free();
+
+	free(rctx->co_pool);
 }
 
 static void* per_thread_loop(void* arg) {

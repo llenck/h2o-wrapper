@@ -193,6 +193,137 @@ static int is_string_safe(const char* str, int len) {
 	return 1;
 }
 
+static h2ow_co_and_stack* get_co_and_stack(h2ow_run_context* rctx) {
+	if (rctx->co_wh != -1) {
+		// if there is one free, advance wh by one and return the free one
+		rctx->co_pool_usage++;
+		h2ow_co_and_stack* ret = &rctx->co_pool[rctx->co_wh];
+		rctx->co_wh = ret->next;
+		return ret;
+	}
+
+	// otherwise, we'll need to resize the pool
+	int old_pool_len = rctx->co_pool_len;
+	int new_pool_len = old_pool_len * 2;
+	h2ow_co_and_stack* new_pool
+	        = realloc(rctx->co_pool, new_pool_len * sizeof(*new_pool));
+	if (new_pool == NULL) {
+		// if there is no memory left, return NULL, indicating that we should probably
+		// send a 500 status code
+		return NULL;
+	}
+
+	for (int i = old_pool_len; i < new_pool_len; i++) {
+		new_pool[i].prev = i - 1;
+		new_pool[i].next = i + 1;
+		new_pool[i].pool = &rctx->co_pool;
+
+		if (unico_create_stack(&new_pool[i].stack, 4096 * 2) < 0) {
+			// TODO graceful cleanup by reallocating new_pool to previous size, fixing
+			// linked list and returning NULL
+			exit(1);
+		}
+	}
+
+	// corner cases not handled by loop; link last old element with the new elements and
+	// mark the next field of the new last element as invalid
+	new_pool[rctx->co_ah].next = old_pool_len;
+	new_pool[new_pool_len - 1].next = -1;
+
+	rctx->co_ah = new_pool_len - 1;
+	rctx->co_pool = new_pool;
+	rctx->co_pool_len = new_pool_len;
+
+	// now that the coroutine pool is big enough, do the same thing as if it had one free
+	// element from the beginning
+	rctx->co_pool_usage++;
+	h2ow_co_and_stack* ret = &rctx->co_pool[rctx->co_wh];
+	rctx->co_wh = ret->next;
+	return ret;
+
+cleanup:
+	// see other TODO
+	return NULL;
+}
+
+static void on_co_yield(h2ow_run_context* rctx, h2ow_co_and_stack* co) {
+	if (!unico_is_finished(&co->co)) {
+		return;
+	}
+
+	// free the coroutine object and recycle the stack to the pool
+	unico_free_co(&co->co);
+
+	h2ow_co_and_stack* pool = rctx->co_pool;
+	int co_idx = co - pool;
+
+	// link co->prev and co->next with each other and/or update rctx->co_{rh,wh,ah}
+	if (co_idx == rctx->co_rh) {
+		printf("setting co_rh to %d and pool[%d].prev to %d\n", rctx->co_rh, co->next,
+		       co->prev);
+
+		// if co was co_rh, we need to update co_rh as co is going to be moved to the
+		// end of the list
+		rctx->co_rh = co->next;
+
+		// also, since the list can never have a size of 1, this means that co isn't
+		// at the end of the linked list and co->next has to be -1; thus we can update
+		// co->next without checking if it is -1
+		pool[co->next].prev = co->prev;
+
+		// append co to the end of the list
+		pool[rctx->co_ah].next = co_idx;
+		co->prev = rctx->co_ah;
+		co->next = -1;
+		rctx->co_ah = co_idx;
+	}
+	else {
+		printf("setting pool[%d].next to %d ", co->prev, co->next);
+		// if co wasn't rctx->co_rh, co->prev has to not be -1 since if it was, co
+		// would be the first element of the linked list and thus rctx->co_rh
+		pool[co->prev].next = co->next;
+
+		// in this case, we also have to check whether the coroutine is at the end of
+		// the list
+		if (co_idx == rctx->co_ah) {
+			printf("and co_wh to %d\n", co_idx);
+			// if co is the last element in the list, we need to update rctx->co_wh as
+			// it is currently -1, as there are no free elements left in the linked list.
+			rctx->co_wh = co_idx;
+		}
+		else {
+			printf("and pool[%d].prev to %d\n", co->next, co->prev);
+			// co is somewhere in the middle, and we can safely update co->next
+			pool[co->next].prev = co->prev;
+
+			// append co to the end of the list
+			// (lets hope the compiler deduplicates this code lol)
+			pool[rctx->co_ah].next = co_idx;
+			co->prev = rctx->co_ah;
+			co->next = -1;
+			rctx->co_ah = co_idx;
+		}
+	}
+
+	rctx->co_pool_usage--;
+
+	if (rctx->co_pool_usage < rctx->co_pool_len / 4 && rctx->co_pool_usage > 16) {
+		// TODO shrink the pool
+	}
+}
+
+static void unico_helper(unico_co_state* self) {
+	h2ow_co_params* params = self->data;
+	// copy the contents of params, as the memory will be invalid after our first yield
+	void (*cb)(h2o_req_t*, h2ow_run_context*, unico_co_state*) = params->handler;
+	h2o_req_t* req = params->req;
+	h2ow_run_context* rctx = params->rctx;
+
+	cb(req, rctx, self);
+
+	unico_exit(self);
+}
+
 int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 	h2ow_handler_and_data* tmp = (h2ow_handler_and_data*)self;
 	h2ow_run_context* rctx = tmp->more_data;
@@ -234,7 +365,48 @@ int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 		return 0;
 	}
 
-	handler->sync_handler(req, rctx);
+	if (handler->call_type == H2OW_HANDLER_NORMAL) {
+		handler->sync_handler(req, rctx);
+	}
+	else if (handler->call_type == H2OW_HANDLER_CO) {
+		h2ow_co_and_stack* co = get_co_and_stack(rctx);
+		if (unlikely(co == NULL)) {
+			H2OW_WARN("Sending 500 for a request to %s\n",
+			          is_string_safe(null_terminated_path, req->path.len) ?
+			                  null_terminated_path :
+			                  "<contains unsafe characters>");
+
+			req->res.status = 500;
+			req->res.reason = "Internal Server Error";
+			h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL,
+			               H2O_STRLIT("text/plain"));
+			h2o_send_inline(req, H2O_STRLIT("internal server error :("));
+
+			return 0;
+		}
+
+		// unico_helper makes a copy of these params, so it is ok to not keep them in
+		// memory after it yields the first time
+		h2ow_co_params params = { req, rctx, handler->co_handler };
+		co->co.data = &params;
+		unico_create_co(&co->co, &co->stack, unico_helper);
+
+		// while it is unlikely, check whether the coroutine is finished
+		on_co_yield(rctx, co);
+	}
+	else {
+		H2OW_NOTE("Sending 500 for a request to %s\n",
+		          is_string_safe(null_terminated_path, req->path.len) ?
+		                  null_terminated_path :
+		                  "<contains unsafe characters>");
+
+		req->res.status = 500;
+		req->res.reason = "Internal Server Error";
+		h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL,
+		               H2O_STRLIT("text/plain"));
+		h2o_send_inline(req, H2O_STRLIT("internal server error ):"));
+		return 0;
+	}
 
 	return 0;
 }

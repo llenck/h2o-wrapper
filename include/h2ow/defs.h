@@ -35,6 +35,7 @@ typedef struct h2ow_handler_lists_s h2ow_handler_lists;
 
 typedef struct h2ow_handler_and_data_s h2ow_handler_and_data;
 typedef struct h2ow_co_and_stack_s h2ow_co_and_stack;
+typedef struct h2ow_co_params_s h2ow_co_params;
 
 /* ================ HANDLER STUFF ================ */
 // save supported methods as a bit field
@@ -115,6 +116,13 @@ struct h2ow_co_and_stack_s {
 	int prev, next;
 };
 
+// struct for passing data to coroutines in co->data
+struct h2ow_co_params_s {
+	h2o_req_t* req;
+	h2ow_run_context* rctx;
+	void (*handler)(h2o_req_t*, h2ow_run_context*, unico_co_state*);
+};
+
 /* ================ USER-VISIBLE STUFF ================ */
 // info about stuff running in the current thread
 struct h2ow_run_context_s {
@@ -142,10 +150,11 @@ struct h2ow_run_context_s {
 	// malloc and free calls
 	h2ow_co_and_stack* co_pool;
 	int co_pool_len;
+	int co_pool_usage;
 	// all coroutine objects are in a linked list; rh ("read head") is the pointer to
-	// the start of active coroutines, ch ("write head") is the pointer to the first
-	// unused h2ow_co_and_stack, ah ("append head") is the pointer to the end of
-	// the linked list, where h2ow_co_and_stacks are recycled to
+	// the start of active coroutines, wh ("write head") is the pointer to the first
+	// unused h2ow_co_and_stack (or -1 if none) and ah ("append head") is the pointer
+	// to the end of the linked list, where h2ow_co_and_stacks are recycled to
 	int co_rh, co_wh, co_ah;
 };
 
