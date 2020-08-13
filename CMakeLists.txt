@@ -43,13 +43,13 @@ ExternalProject_Add(unico
 	BINARY_DIR deps/unico
 	STEP_TARGETS build
 	CONFIGURE_COMMAND cmake -E echo "Skipping configure step"
-	BUILD_COMMAND ./compile
+	BUILD_COMMAND bash -c "CFLAGS='-DACO_USE_VALGRIND' ./compile"
 	INSTALL_COMMAND cmake -E echo "Skipping install step"
 )
 
 # stuff for building our own library
 set(CMAKE_C_FLAGS "-Wall -Wextra -O3")
-set(CMAKE_C_FLAGS_DEBUG "-Wall -Wextra -Wpedantic -Werror -Og -g")
+set(CMAKE_C_FLAGS_DEBUG "-Wall -Wextra -Wpedantic -Og -g -pg")
 
 include_directories(include)
 add_library(h2ow-pre STATIC lib/runtime.c lib/settings.c lib/handlers.c lib/run-setup.c lib/utils.c)
