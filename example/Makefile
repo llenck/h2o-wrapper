@@ -35,7 +35,7 @@ INCLUDEDIRS := -I ../include \
 
 LIBS := ../libh2ow.a -luv -lcrypto -lssl -lpthread
 
-all: simple ssl post-parsing
+all: simple ssl post-parsing coroutines
 
 simple: simple.c ../libh2ow.a
 	$(CC) $(CFLAGS) $(INCLUDEDIRS) simple.c $(LIBS) -o simple
@@ -46,5 +46,8 @@ ssl: ssl.c ../libh2ow.a
 post-parsing: post-parsing.c ../libh2ow.a
 	$(CC) $(CFLAGS) $(INCLUDEDIRS) post-parsing.c $(LIBS) -o post-parsing
 
+coroutines: coroutines.c ../libh2ow.a
+	$(CC) $(CFLAGS) $(INCLUDEDIRS) coroutines.c $(LIBS) -o coroutines
+
 clean:
-	$(RM) simple ssl post-parsing
+	$(RM) simple ssl post-parsing coroutines
