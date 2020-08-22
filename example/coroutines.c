@@ -4,7 +4,7 @@
 #include "h2ow.h"
 
 void co_handler(h2o_req_t* req, __attribute__((unused)) h2ow_run_context* rctx,
-                __attribute__((unused)) unico_co_state* self) {
+                __attribute__((unused)) h2ow_resume_args* self) {
 	req->res.status = 200;
 	req->res.reason = "OK";
 	h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL,

@@ -36,6 +36,7 @@ typedef struct h2ow_handler_lists_s h2ow_handler_lists;
 typedef struct h2ow_handler_and_data_s h2ow_handler_and_data;
 typedef struct h2ow_co_and_stack_s h2ow_co_and_stack;
 typedef struct h2ow_co_params_s h2ow_co_params;
+typedef struct h2ow_resume_args_s h2ow_resume_args;
 
 /* ================ HANDLER STUFF ================ */
 // save supported methods as a bit field
@@ -67,7 +68,7 @@ struct h2ow_request_handler_s {
 	union {
 		void* handler;
 		void (*sync_handler)(h2o_req_t*, h2ow_run_context*);
-		void (*co_handler)(h2o_req_t*, h2ow_run_context*, unico_co_state*);
+		void (*co_handler)(h2o_req_t*, h2ow_run_context*, h2ow_resume_args*);
 	};
 
 	const char* path;
@@ -105,10 +106,18 @@ struct h2ow_handler_and_data_s {
 	void* more_data;
 };
 
+/* ================ COROUTINE RELATED STUFF ================ */
+
 // convenience struct for pool of stacks and coroutine objects
 struct h2ow_co_and_stack_s {
 	unico_stack stack;
 	unico_co_state co;
+
+	// having this coroutine-global makes it possible to hide more stuff from the
+	// user while still being efficient. It can't be allocated here however, since
+	// we pass pointers to it to libuv and this struct needs to be relocatable.
+	// instead, it is allocated to the request memory pool before calling the coroutine
+	h2ow_resume_args* resume_args;
 
 	// since we want to be able to realloc() a buffer of these, store the index of
 	// adjacent nodes instead of a pointer to them, and -1 instead of NULL
@@ -120,7 +129,60 @@ struct h2ow_co_and_stack_s {
 struct h2ow_co_params_s {
 	h2o_req_t* req;
 	h2ow_run_context* rctx;
-	void (*handler)(h2o_req_t*, h2ow_run_context*, unico_co_state*);
+	void (*handler)(h2o_req_t*, h2ow_run_context*, h2ow_resume_args*);
+	int idx; // index of current h2ow_co_and_stack in rctx->pool
+};
+
+// struct passed to callbacks that should continue a coroutine,
+// which also contains the result of what was called asynchronously
+struct h2ow_resume_args_s {
+	// since the coroutine object has to be relocatable, keep a pointer to the
+	// pool in rctx and an index
+	h2ow_co_and_stack** pool;
+	int idx;
+
+	// set to 1 if the request died while the coroutine was yielded, 0 otherwise
+	int is_dead;
+
+	union {
+		// nothing for h2ow_co_resume
+
+		// h2ow_co_resume_i
+		struct {
+			int status;
+		} i;
+
+		// h2ow_co_resume_poll
+		struct {
+			int status;
+			int events;
+		} poll;
+
+		// h2ow_co_resume_read
+		struct {
+			ssize_t nread;
+			const uv_buf_t* buf;
+		} read;
+
+		// h2ow_co_resume_exit
+		struct {
+			int64_t status;
+			int term_sig;
+		} exit;
+
+		// h2ow_co_resume_getaddrinfo
+		struct {
+			int status;
+			struct addrinfo* res;
+		} getaddrinfo;
+
+		// h2ow_co_resume_getnameinfo
+		struct {
+			int status;
+			const char* hostname;
+			const char* service;
+		} getnameinfo;
+	} res;
 };
 
 /* ================ USER-VISIBLE STUFF ================ */

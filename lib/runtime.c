@@ -1,6 +1,7 @@
 #include "h2ow/runtime.h"
 #include "h2ow/settings.h"
 #include "h2ow/handlers.h"
+#include "h2ow/utils.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -196,10 +197,7 @@ static int is_string_safe(const char* str, int len) {
 static h2ow_co_and_stack* get_co_and_stack(h2ow_run_context* rctx) {
 	if (rctx->co_wh != -1) {
 		// if there is one free, advance wh by one and return the free one
-		rctx->co_pool_usage++;
-		h2ow_co_and_stack* ret = &rctx->co_pool[rctx->co_wh];
-		rctx->co_wh = ret->next;
-		return ret;
+		goto get_co;
 	}
 
 	// otherwise, we'll need to resize the pool
@@ -234,6 +232,7 @@ static h2ow_co_and_stack* get_co_and_stack(h2ow_run_context* rctx) {
 	rctx->co_pool = new_pool;
 	rctx->co_pool_len = new_pool_len;
 
+get_co:
 	// now that the coroutine pool is big enough, do the same thing as if it had one free
 	// element from the beginning
 	rctx->co_pool_usage++;
@@ -315,11 +314,32 @@ static void on_co_yield(h2ow_run_context* rctx, h2ow_co_and_stack* co) {
 static void unico_helper(unico_co_state* self) {
 	h2ow_co_params* params = self->data;
 	// copy the contents of params, as the memory will be invalid after our first yield
-	void (*cb)(h2o_req_t*, h2ow_run_context*, unico_co_state*) = params->handler;
+	void (*cb)(h2o_req_t*, h2ow_run_context*, h2ow_resume_args*) = params->handler;
 	h2o_req_t* req = params->req;
+	int self_idx = params->idx;
 	h2ow_run_context* rctx = params->rctx;
 
-	cb(req, rctx, self);
+	h2ow_co_and_stack* self_with_stack = &rctx->co_pool[self_idx];
+
+	// allocate memory for return values from async calls to the request, which should
+	// give better cache performance than allocating them statically
+	h2ow_resume_args* res_args = h2ow_req_pool_alloc(req, sizeof(*res_args));
+	self_with_stack->resume_args = res_args;
+
+	res_args->pool = &rctx->co_pool;
+	res_args->idx = self_idx;
+	res_args->is_dead = 0;
+
+	cb(req, rctx, res_args);
+
+	// at this point, if cb yielded and other coroutines were called, the current
+	// h2ow_co_and_stack might have been relocated, and we can't safely use self
+	// anymore, so we recompute it
+	self = &rctx->co_pool[self_idx].co;
+
+	// on x86 the expansion of unico_exit causes scan-build to report a dead store
+	// on self, so tell it to not do so
+	(void)self;
 
 	unico_exit(self);
 }
@@ -387,7 +407,7 @@ int h2ow__request_handler(h2o_handler_t* self, h2o_req_t* req) {
 
 		// unico_helper makes a copy of these params, so it is ok to not keep them in
 		// memory after it yields the first time
-		h2ow_co_params params = { req, rctx, handler->co_handler };
+		h2ow_co_params params = { req, rctx, handler->co_handler, rctx->co_pool - co };
 		co->co.data = &params;
 		unico_create_co(&co->co, &co->stack, unico_helper);
 

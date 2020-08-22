@@ -1,6 +1,6 @@
-#include <h2ow/uthash.h>
+#include "h2ow/utils.h"
 
-#include <h2ow/utils.h>
+#include <h2ow/uthash.h>
 
 char hex_to_num[256]
         = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
