@@ -52,7 +52,7 @@ set(CMAKE_C_FLAGS "-Wall -Wextra -O3")
 set(CMAKE_C_FLAGS_DEBUG "-Wall -Wextra -Wpedantic -Og -g -pg")
 
 include_directories(include)
-add_library(h2ow-pre STATIC lib/runtime.c lib/settings.c lib/handlers.c lib/run-setup.c lib/utils.c)
+add_library(h2ow-pre STATIC lib/runtime.c lib/settings.c lib/handlers.c lib/run-setup.c lib/utils.c lib/co-callbacks.c)
 
 # combine our library with others so people don't have to link against them
 add_custom_target(h2ow ALL

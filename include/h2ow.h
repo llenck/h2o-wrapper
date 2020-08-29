@@ -7,5 +7,6 @@
 #include "h2ow/run-setup.h"
 #include "h2ow/runtime.h"
 #include "h2ow/utils.h"
+#include "h2ow/co-callbacks.h"
 
 #endif

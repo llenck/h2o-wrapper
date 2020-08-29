@@ -2,6 +2,7 @@
 #include "h2ow/settings.h"
 #include "h2ow/handlers.h"
 #include "h2ow/utils.h"
+#include "h2ow/co-callbacks.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -321,6 +322,8 @@ static void unico_helper(unico_co_state* self) {
 
 	h2ow_co_and_stack* self_with_stack = &rctx->co_pool[self_idx];
 
+	self_with_stack->is_dead = 0;
+
 	// allocate memory for return values from async calls to the request, which should
 	// give better cache performance than allocating them statically
 	h2ow_resume_args* res_args = h2ow_req_pool_alloc(req, sizeof(*res_args));
@@ -328,7 +331,11 @@ static void unico_helper(unico_co_state* self) {
 
 	res_args->pool = &rctx->co_pool;
 	res_args->idx = self_idx;
-	res_args->is_dead = 0;
+	res_args->waiting_for_proceed = 0;
+
+	res_args->super.proceed = h2ow__co_resume_proceed;
+	res_args->super.stop = h2ow__co_resume_stop;
+	h2o_start_response(req, &res_args->super);
 
 	cb(req, rctx, res_args);
 

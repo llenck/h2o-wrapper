@@ -9,7 +9,16 @@ void co_handler(h2o_req_t* req, __attribute__((unused)) h2ow_run_context* rctx,
 	req->res.reason = "OK";
 	h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL,
 	               H2O_STRLIT("text/plain"));
-	h2o_send_inline(req, H2O_STRLIT("hello, world from a coroutine!\n"));
+
+	// we can't have buf on the stack since it will be used after h2o_send returns,
+	// and h2o_send_inline is also not allowed in coroutines because h2ow sets a
+	// generator before calling coroutine handlers
+	h2o_iovec_t* buf = h2ow_req_pool_alloc(req, sizeof(*buf));
+	char* str = "hello, world from a coroutine!\n";
+	buf->base = str;
+	buf->len = strlen(str);
+
+	h2o_send(req, buf, 1, H2O_SEND_STATE_FINAL);
 }
 
 int main() {

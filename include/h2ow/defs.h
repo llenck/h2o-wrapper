@@ -119,6 +119,9 @@ struct h2ow_co_and_stack_s {
 	// instead, it is allocated to the request memory pool before calling the coroutine
 	h2ow_resume_args* resume_args;
 
+	// set to 1 if the request died while the coroutine was yielded, 0 otherwise
+	int is_dead;
+
 	// since we want to be able to realloc() a buffer of these, store the index of
 	// adjacent nodes instead of a pointer to them, and -1 instead of NULL
 	h2ow_co_and_stack** pool;
@@ -136,13 +139,18 @@ struct h2ow_co_params_s {
 // struct passed to callbacks that should continue a coroutine,
 // which also contains the result of what was called asynchronously
 struct h2ow_resume_args_s {
+	// this is also used for h2o generator callbacks, so we makes pointers to this struct
+	// compatible with h2o_generator_t* pointers
+	h2o_generator_t super;
+
+	// because we have to keep the generator the same for the duration of the request,
+	// we indicate here whether the proceed callback should resume the coroutine
+	int waiting_for_proceed;
+
 	// since the coroutine object has to be relocatable, keep a pointer to the
 	// pool in rctx and an index
 	h2ow_co_and_stack** pool;
 	int idx;
-
-	// set to 1 if the request died while the coroutine was yielded, 0 otherwise
-	int is_dead;
 
 	union {
 		// nothing for h2ow_co_resume
@@ -182,7 +190,51 @@ struct h2ow_resume_args_s {
 			const char* hostname;
 			const char* service;
 		} getnameinfo;
+
+		// h2ow_co_resume_fs_event
+		struct {
+			const char* filename;
+			int events;
+			int status;
+		} fs_event;
+
+		// h2ow_co_resume_fs_poll
+		struct {
+			int status;
+			const uv_stat_t* prev;
+			const uv_stat_t* curr;
+		} fs_poll;
+
+		// h2ow_co_resume_signal
+		struct {
+			int signum;
+		} signal;
+
+		// h2ow_co_resume_udp_recv
+		struct {
+			ssize_t nread;
+			const uv_buf_t* buf;
+			const struct sockaddr* addr;
+			unsigned flags;
+		} udp_recv;
 	} res;
+
+	union {
+		uv_handle_t handle;
+		uv_stream_t stream;
+		uv_tcp_t tcp;
+		uv_udp_t udp;
+		uv_pipe_t pipe;
+		uv_poll_t poll;
+		uv_timer_t timer;
+		uv_prepare_t prepare;
+		uv_check_t check;
+		uv_idle_t idle;
+		uv_async_t async;
+		uv_process_t process;
+		uv_fs_event_t fs_event;
+		uv_fs_poll_t fs_poll;
+	} req;
 };
 
 /* ================ USER-VISIBLE STUFF ================ */
